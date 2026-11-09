@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: account-service
+  mongodb:
+    uri: mongodb://localhost:27017/account-service-db
+
+server:
+  port: 8082
