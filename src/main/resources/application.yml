@@ -4,5 +4,12 @@ spring:
   mongodb:
     uri: ${MONGODB_URI:mongodb://localhost:27017/account-service-db}
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    url: /account-openapi.yml
+    path: /swagger-ui.html
+
 server:
   port: ${PORT:8082}

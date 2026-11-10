@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: Bank Account Management Microservice (account-service)
+  description: Reactive Open-API Contract handling Savings, Current, and Fixed Term account lifecycles and direct financial operations.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: API Gateway Entry Point
+  - url: http://localhost:8082
+    description: Direct Account Service Instance
+paths:
+  /api/accounts:
+    post:
+      summary: Open a new bank account
+      description: Provisions a Savings, Current, or Fixed-Term account. Enforces business compliance such as blocking enterprise customers from savings lines.
+      operationId: createAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Account'
+      responses:
+        '201':
+          description: Bank account provisioned and ledger configured successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: Business rule violation or invalid parameters provided.
+
+  /api/accounts/number/{accountNumber}:
+    get:
+      summary: Find bank account by its account number
+      operationId: getAccountByNumber
+      parameters:
+        - name: accountNumber
+          in: path
+          required: true
+          description: Unique system-generated account number string
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Bank account payload found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          description: Requested account number does not exist.
+
+  /api/accounts/customer/{customerId}:
+    get:
+      summary: Retrieve account portfolio by Customer ID
+      description: Returns a non-blocking stream of all active bank accounts belonging to a specific customer.
+      operationId: getAccountsByCustomer
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          description: Target customer hex identifier string
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Array stream of customer bank accounts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+
+  /api/accounts/transaction:
+    post:
+      summary: Execute a direct ledger transaction (Deposit / Withdrawal)
+      description: Performs instantaneous balance adjustments on the targeted account. Blocks withdrawals exceeding available funds.
+      operationId: executeTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - accountNumber
+                - type
+                - amount
+                - description
+              properties:
+                accountNumber:
+                  type: string
+                  example: ACC-A2B3C4D5
+                type:
+                  type: string
+                  enum: [DEPOSIT, WITHDRAWAL]
+                  example: DEPOSIT
+                amount:
+                  type: number
+                  format: double
+                  example: 250.50
+                description:
+                  type: string
+                  example: Over-the-counter teller deposit
+      responses:
+        '200':
+          description: Balance adjusted and transactional receipt emitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountTransaction'
+        '400':
+          description: Insufficient funds or invalid operational instructions.
+
+components:
+  schemas:
+    Account:
+      type: object
+      required:
+        - customerId
+        - customerType
+        - type
+        - currency
+        - balance
+      properties:
+        id:
+          type: string
+          example: 65f1a2b3c4d5e6f7a8b9c101
+        accountNumber:
+          type: string
+          example: ACC-A2B3C4D5
+        customerId:
+          type: string
+          example: 65f1a2b3c4d5e6f7a8b9c001
+        customerType:
+          type: string
+          enum: [PERSONAL, ENTERPRISE]
+          example: PERSONAL
+        type:
+          type: string
+          enum: [SAVINGS, CURRENT, FIXED_TERM]
+          example: SAVINGS
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          example: ACTIVE
+        balance:
+          type: number
+          format: double
+          example: 1500.50
+        currency:
+          type: string
+          example: PEN
+        config:
+          $ref: '#/components/schemas/AccountConfig'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-03-15T14:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-03-15T18:30:00Z'
+
+    AccountConfig:
+      type: object
+      description: Immutable configurations matching native Java 27 Records.
+      properties:
+        maintenanceFee:
+          type: number
+          format: double
+          example: 0.00
+        maxMonthlyMovements:
+          type: integer
+          nullable: true
+          example: 5
+        currentMonthlyMovements:
+          type: integer
+          example: 2
+        allowedOperationDay:
+          type: integer
+          nullable: true
+          example: 25
+
+    AccountTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 65f1a2b3c4d5e6f7a8b9c104
+        transactionNumber:
+          type: string
+          example: TXN-ACC-20260315-001
+        accountId:
+          type: string
+          example: 65f1a2b3c4d5e6f7a8b9c101
+        accountNumber:
+          type: string
+          example: ACC-A2B3C4D5
+        type:
+          type: string
+          enum: [DEPOSIT, WITHDRAWAL]
+          example: DEPOSIT
+        amount:
+          type: number
+          format: double
+          example: 200.00
+        description:
+          type: string
+          example: Counter cash branch deposit
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-03-15T18:30:00Z'
