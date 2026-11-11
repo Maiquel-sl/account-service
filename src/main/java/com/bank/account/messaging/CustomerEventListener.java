@@ -1,4 +1,4 @@
-package com.bank.account.messaging; // o com.bank.credit.messaging
+package com.bank.account.messaging;
 
 import com.bank.account.events.CustomerEvent;
 import com.bank.account.model.CustomerReplica;
