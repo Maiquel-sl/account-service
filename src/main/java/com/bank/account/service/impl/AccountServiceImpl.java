@@ -6,6 +6,7 @@ import com.bank.account.model.Account;
 import com.bank.account.model.AccountTransaction;
 import com.bank.account.repository.AccountRepository;
 import com.bank.account.repository.AccountTransactionRepository;
+import com.bank.account.repository.CustomerReplicaRepository;
 import com.bank.account.service.AccountService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -18,44 +19,60 @@ import java.util.UUID;
 public class AccountServiceImpl implements AccountService {
 
     private final AccountRepository accountRepository;
-
     private final AccountTransactionRepository transactionRepository;
-
+    private final CustomerReplicaRepository customerReplicaRepository;
     private final AccountEventPublisher eventPublisher;
 
     public AccountServiceImpl(AccountRepository accountRepository,
                               AccountTransactionRepository transactionRepository,
+                              CustomerReplicaRepository customerReplicaRepository,
                               AccountEventPublisher eventPublisher) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
+        this.customerReplicaRepository = customerReplicaRepository;
         this.eventPublisher = eventPublisher;
     }
 
     @Override
     public Mono<Account> createAccount(Account account) {
-        // Validación de Reglas de Negocio usando Pattern Matching de Java 27
-        if ("ENTERPRISE".equals(account.getCustomerType()) && 
-            ("SAVINGS".equals(account.getType()) || "FIXED_TERM".equals(account.getType()))) {
-            return Mono.error(new IllegalArgumentException("Un cliente empresarial no puede tener una cuenta de ahorro o de plazo fijo"));
-        }
-
-        return accountRepository.findByCustomerId(account.getCustomerId())
-                .collectList()
-                .flatMap(existingAccounts -> {
-                    // Validar límite para cliente Personal
-                    if ("PERSONAL".equals(account.getCustomerType())) {
-                        boolean alreadyHasType = existingAccounts.stream()
-                                .anyMatch(acc -> acc.getType().equals(account.getType()));
-                        if (alreadyHasType) {
-                            return Mono.error(new IllegalArgumentException("Cliente personal ya tiene una cuenta de tipo: " + account.getType()));
-                        }
+        // 1. Validación local contra la réplica sincronizada por Kafka (Cero REST)
+        return customerReplicaRepository.findById(account.getCustomerId())
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Cliente no encontrado en la réplica local")))
+                .flatMap(customer -> {
+                    if (!"ACTIVE".equals(customer.getStatus())) {
+                        return Mono.error(new IllegalArgumentException("El cliente se encuentra inactivo"));
                     }
-                    
-                    account.setAccountNumber("ACC-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
-                    account.setStatus("ACTIVE");
-                    account.setCreatedAt(LocalDateTime.now());
-                    account.setUpdatedAt(LocalDateTime.now());
-                    return accountRepository.save(account);
+
+                    // Asignar el tipo confiable proveniente del evento
+                    String verifiedType = customer.getType();
+                    account.setCustomerType(verifiedType);
+
+                    // 2. Regla empresarial: No puede tener Ahorro ni Plazo Fijo
+                    if ("ENTERPRISE".equals(verifiedType) &&
+                            ("SAVINGS".equals(account.getType()) || "FIXED_TERM".equals(account.getType()))) {
+                        return Mono.error(new IllegalArgumentException(
+                                "Un cliente empresarial no puede tener cuentas de ahorro o plazo fijo"));
+                    }
+
+                    // 3. Validar cuentas existentes del cliente
+                    return accountRepository.findByCustomerId(account.getCustomerId())
+                            .collectList()
+                            .flatMap(existingAccounts -> {
+                                if ("PERSONAL".equals(verifiedType)) {
+                                    boolean alreadyHasType = existingAccounts.stream()
+                                            .anyMatch(acc -> acc.getType().equals(account.getType()));
+                                    if (alreadyHasType) {
+                                        return Mono.error(new IllegalArgumentException(
+                                                "Un cliente personal solo puede tener una cuenta de tipo: " + account.getType()));
+                                    }
+                                }
+
+                                account.setAccountNumber("ACC-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+                                account.setStatus("ACTIVE");
+                                account.setCreatedAt(LocalDateTime.now());
+                                account.setUpdatedAt(LocalDateTime.now());
+                                return accountRepository.save(account);
+                            });
                 });
     }
 

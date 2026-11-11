@@ -5,14 +5,18 @@ spring:
     uri: ${MONGODB_URI:mongodb://localhost:27017/account-service-db}
   cloud:
     function:
-      definition: accountEventProducer
+      definition: accountEventProducer;customerEventConsumer
     stream:
       kafka:
         binder:
           brokers: ${KAFKA_BROKERS:localhost:9092}
       bindings:
         accountEventProducer-out-0:
-          destination: bank-account-events
+          destination: account-events
+          content-type: application/json
+        customerEventConsumer-in-0:
+          destination: customer-events
+          group: account-customer-replica-group
           content-type: application/json
 
 springdoc:
