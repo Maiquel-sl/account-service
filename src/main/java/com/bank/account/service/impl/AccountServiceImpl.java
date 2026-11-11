@@ -1,5 +1,7 @@
 package com.bank.account.service.impl;
 
+import com.bank.account.events.AccountTransactionEvent;
+import com.bank.account.messaging.AccountEventPublisher;
 import com.bank.account.model.Account;
 import com.bank.account.model.AccountTransaction;
 import com.bank.account.repository.AccountRepository;
@@ -19,10 +21,14 @@ public class AccountServiceImpl implements AccountService {
 
     private final AccountTransactionRepository transactionRepository;
 
+    private final AccountEventPublisher eventPublisher;
+
     public AccountServiceImpl(AccountRepository accountRepository,
-                              AccountTransactionRepository transactionRepository) {
+                              AccountTransactionRepository transactionRepository,
+                              AccountEventPublisher eventPublisher) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -93,7 +99,18 @@ public class AccountServiceImpl implements AccountService {
                     tx.setTimestamp(LocalDateTime.now());
 
                     return accountRepository.save(account)
-                            .then(transactionRepository.save(tx));
+                    .then(transactionRepository.save(tx))
+                    .doOnSuccess(savedTx -> eventPublisher.publish(new AccountTransactionEvent(
+                        savedTx.getTransactionNumber(),
+                        account.getCustomerId(),
+                        account.getId(),
+                        account.getType(),
+                        account.getAccountNumber(),
+                        savedTx.getType(),
+                        savedTx.getAmount(),
+                        account.getCurrency(),
+                        savedTx.getDescription(),
+                        savedTx.getTimestamp())));
                 });
     }
 }

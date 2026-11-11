@@ -3,6 +3,17 @@ spring:
     name: account-service
   mongodb:
     uri: ${MONGODB_URI:mongodb://localhost:27017/account-service-db}
+  cloud:
+    function:
+      definition: accountEventProducer
+    stream:
+      kafka:
+        binder:
+          brokers: ${KAFKA_BROKERS:localhost:9092}
+      bindings:
+        accountEventProducer-out-0:
+          destination: bank-account-events
+          content-type: application/json
 
 springdoc:
   api-docs:
