@@ -8,12 +8,15 @@ import com.bank.account.repository.AccountRepository;
 import com.bank.account.repository.AccountTransactionRepository;
 import com.bank.account.repository.CustomerReplicaRepository;
 import com.bank.account.service.AccountService;
+import com.bank.account.util.ReactiveFallbackHandler;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 
 @Service
 public class AccountServiceImpl implements AccountService {
@@ -34,6 +37,8 @@ public class AccountServiceImpl implements AccountService {
     }
 
     @Override
+    @CircuitBreaker(name = "bankServiceCB", fallbackMethod = "genericMonoFallback")
+    @TimeLimiter(name = "bankServiceCB")
     public Mono<Account> createAccount(Account account) {
         // 1. Validación local contra la réplica sincronizada por Kafka (Cero REST)
         return customerReplicaRepository.findById(account.getCustomerId())
@@ -77,16 +82,22 @@ public class AccountServiceImpl implements AccountService {
     }
 
     @Override
+    @CircuitBreaker(name = "bankServiceCB", fallbackMethod = "genericMonoFallback")
+    @TimeLimiter(name = "bankServiceCB")
     public Mono<Account> getAccountByNumber(String accountNumber) {
         return accountRepository.findByAccountNumber(accountNumber);
     }
 
     @Override
+    @CircuitBreaker(name = "bankServiceCB", fallbackMethod = "genericFluxFallback")
+    @TimeLimiter(name = "bankServiceCB")
     public Flux<Account> getAccountsByCustomerId(String customerId) {
         return accountRepository.findByCustomerId(customerId);
     }
 
     @Override
+    @CircuitBreaker(name = "bankServiceCB", fallbackMethod = "genericMonoFallback")
+    @TimeLimiter(name = "bankServiceCB")
     public Mono<AccountTransaction> executeTransaction(String accountNumber, String type, BigDecimal amount, String description) {
         return accountRepository.findByAccountNumber(accountNumber)
                 .switchIfEmpty(Mono.error(new RuntimeException("Cuenta no encontrada")))
@@ -130,4 +141,19 @@ public class AccountServiceImpl implements AccountService {
                         savedTx.getTimestamp())));
                 });
     }
+
+    // =========================================================================
+    // MÉTODOS FALLBACK GENÉRICOS PARA TODA LA CLASE
+    // =========================================================================
+
+    @SuppressWarnings("unused")
+    private <T> Mono<T> genericMonoFallback(Throwable ex) {
+        return ReactiveFallbackHandler.handleMonoFallback("AccountService", ex);
+    }
+
+    @SuppressWarnings("unused")
+    private <T> Flux<T> genericFluxFallback(Throwable ex) {
+        return ReactiveFallbackHandler.handleFluxFallback("AccountService", ex);
+    }
+
 }
