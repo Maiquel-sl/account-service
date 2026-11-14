@@ -2,6 +2,9 @@ package com.bank.account.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -10,6 +13,7 @@ public class Account {
     @Id
     private String id;
     private String accountNumber;
+    @Field(targetType = FieldType.OBJECT_ID)
     private String customerId;
     private String customerType; // PERSONAL, ENTERPRISE
     private String type; // SAVINGS, CURRENT, FIXED_TERM
