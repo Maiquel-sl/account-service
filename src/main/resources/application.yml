@@ -2,7 +2,7 @@ spring:
   application:
     name: account-service
   mongodb:
-    uri: ${MONGODB_URI:mongodb://localhost:27018/account-service-db}
+    uri: ${MONGODB_URI:mongodb://localhost:27017/account-service-db}
   cloud:
     function:
       definition: accountEventProducer;customerEventConsumer
